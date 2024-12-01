@@ -79,16 +79,16 @@ pub fn adjust_brightness_relative(value: i32, percentage: bool) -> Result<()> {
     let brightness: i32 = get_brightness()?.try_into().unwrap();
 
     if percentage {
-        let max_brightness: i32 = get_max_brightness()?.try_into().unwrap();
+        let max_brightness = get_max_brightness()?;
 
-        let new_brightness: u32 = (max_brightness * value / 100 + brightness).max(0) as u32;
+        let new_brightness = (max_brightness as i32 * value / 100 + brightness).max(0) as u32;
 
         set_brightness(new_brightness)?;
 
         return Ok(());
     }
 
-    let new_brightness: i32 = brightness + value;
+    let new_brightness = brightness + value;
 
     set_brightness(max(0, new_brightness).try_into().unwrap())
 }
@@ -102,9 +102,9 @@ pub fn adjust_brightness_relative(value: i32, percentage: bool) -> Result<()> {
 /// - `percentage`: Will treat the value as a percentage of the max to set to, rather than an absolute value.
 pub fn adjust_brightness_absolute(value: u32, percentage: bool) -> Result<()> {
     if percentage {
-        let max_brightness: u32 = get_max_brightness()?;
+        let max_brightness = get_max_brightness()?;
 
-        let new_brightness: u32 = max_brightness * value / 100;
+        let new_brightness = max_brightness * value / 100;
 
         set_brightness(new_brightness)?;
 

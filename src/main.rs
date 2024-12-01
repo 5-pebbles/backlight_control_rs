@@ -4,69 +4,24 @@ use backlight_control_rs::*;
 use clap::{Parser, ValueHint};
 use regex::Regex;
 
-fn main() -> ExitCode {
-    let args = Args::parse();
-
-    if args.stats {
-        let max_brightness = get_max_brightness();
-        let brightness = get_brightness();
-
-        let exit_code = if max_brightness.is_ok() && brightness.is_ok() {
-            ExitCode::SUCCESS
-        } else {
-            ExitCode::FAILURE
-        };
-
-        let max_brightness_output = match max_brightness {
-            Ok(s) => s.to_string(),
-            Err(e) => {
-                format!("Failed to get max brightness: {}", e)
-            }
-        };
-
-        let brightness_output = match brightness {
-            Ok(s) => s.to_string(),
-            Err(e) => {
-                format!("Failed to get brightness: {}", e)
-            }
-        };
-
-        println!("Max: {}", max_brightness_output);
-        println!("Current: {}", brightness_output);
-        return exit_code;
+fn value_validator(value: &str) -> std::result::Result<String, String> {
+    if value.is_empty() {
+        return Ok("".to_string());
     }
 
-    if let Some(val) = args.value {
-        let percentage = val.ends_with("%");
+    let re = Regex::new(r"^[+-]?[0-9]+%?$").unwrap();
 
-        let end_pos = if percentage { 1 } else { 0 };
-
-        let value_string = val.chars().take(val.len() - end_pos).collect::<String>();
-
-        // NOTE: Unwrapping here *should* be safe since we know the string has len of at least 1
-        if let '+' | '-' = val.chars().next().unwrap() {
-            let value: i32 = value_string.parse().unwrap();
-
-            if let Err(e) = adjust_brightness_relative(value, percentage) {
-                eprintln!("Failed to adjust brightness: {}", e);
-                return ExitCode::FAILURE;
-            }
-        } else {
-            let value: u32 = value_string.parse().unwrap();
-
-            if let Err(e) = adjust_brightness_absolute(value, percentage) {
-                eprintln!("Failed to adjust brightness: {}", e);
-                return ExitCode::FAILURE;
-            }
-        };
+    if re.is_match(value) {
+        Ok(value.to_string())
+    } else {
+        Err("Value provided does not match proper form.".to_string())
     }
-
-    ExitCode::SUCCESS
 }
 
 #[derive(Parser, Debug)]
 #[command(
     version,
+    arg_required_else_help = true,
     about = "backlight_control_rs | a simple util for controlling the backlight brightness on your device"
 )]
 struct Args {
@@ -82,16 +37,57 @@ struct Args {
     stats: bool,
 }
 
-fn value_validator(value: &str) -> std::result::Result<String, String> {
-    if value.is_empty() {
-        return Ok("".to_string());
+fn main() -> ExitCode {
+    let args = Args::parse();
+
+    if args.stats {
+        let max_brightness = get_max_brightness();
+        let brightness = get_brightness();
+
+        let exit_code = if max_brightness.is_ok() && brightness.is_ok() {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        };
+
+        let max_brightness_output = max_brightness
+            .as_ref()
+            .map(u32::to_string)
+            .unwrap_or_else(|e| format!("Failed to get max brightness: {}", e));
+        let brightness_output = brightness
+            .as_ref()
+            .map(u32::to_string)
+            .unwrap_or_else(|e| format!("Failed to get brightness: {}", e));
+
+        println!("Max: {}", max_brightness_output);
+        println!("Current: {}", brightness_output);
+        return exit_code;
     }
 
-    let re = Regex::new(r"^[+-]?[0-9]+%?$").unwrap();
+    let value = args.value.unwrap();
 
-    if re.is_match(value) {
-        Ok(value.to_string())
-    } else {
-        Err("Value provided does not match proper form.".to_string())
+    let is_percentage = value.ends_with("%");
+    let value_string = value
+        .chars()
+        .take(value.len() - is_percentage as usize)
+        .collect::<String>();
+
+    // NOTE: Unwrapping here *should* be safe since we know the string has len of at least 1
+    let result = match value.chars().next().unwrap() {
+        '+' | '-' => {
+            let parse_result: i32 = value_string.parse().unwrap();
+            adjust_brightness_relative(parse_result, is_percentage)
+        }
+        _ => {
+            let parse_result: u32 = value_string.parse().unwrap();
+            adjust_brightness_absolute(parse_result, is_percentage)
+        }
+    };
+
+    if let Err(e) = result {
+        eprintln!("Failed to adjust brightness: {}", e);
+        return ExitCode::FAILURE;
     }
+
+    ExitCode::SUCCESS
 }
